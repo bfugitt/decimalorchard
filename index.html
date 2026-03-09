@@ -101,7 +101,8 @@
                 { id: 4, name: "Harvest", desc: "Decimals back to Fractions", d: 'both', mixed: true, reverse: true },
                 { id: 5, name: "Gathering", desc: "Adding Decimals (regrouping)", type: 'add' },
                 { id: 6, name: "Pruning", desc: "Subtracting Decimals (borrowing)", type: 'sub' },
-                { id: 7, name: "Cider Press", desc: "Add & Subtract Decimals", type: 'mixed_arithmetic' }
+                { id: 7, name: "Cider Press", desc: "Add & Subtract Decimals", type: 'mixed_arithmetic' },
+                { id: 8, name: "The Grafting Shed", desc: "Convert tricky fractions (1/4, 1/2)", type: 'convert' }
             ]
         };
 
@@ -143,6 +144,23 @@
                 const n1 = { w: w1, t: t1, h: h1, val: w1*100 + t1*10 + h1 };
                 const n2 = { w: w2, t: t2, h: h2, val: w2*100 + t2*10 + h2 };
                 return { type: 'arithmetic', n1, n2, op };
+            }
+
+            if (config.type === 'convert') {
+                // Focus on fractions that cleanly factor into 10 or 100
+                const trickyFractions = [
+                    { d: 2, target: 10 },
+                    { d: 4, target: 100 },
+                    { d: 5, target: 10 },
+                    { d: 20, target: 100 },
+                    { d: 25, target: 100 },
+                    { d: 50, target: 100 }
+                ];
+                const selection = trickyFractions[getRandomInt(0, trickyFractions.length - 1)];
+                const d = selection.d;
+                const target = selection.target;
+                const n = getRandomInt(1, d - 1);
+                return { type: 'convert', n, d, target, w: 0 };
             }
 
             // Determine Denominator
@@ -257,6 +275,8 @@
             const [pvInputs, setPvInputs] = useState({ ones: '', tenths: '', hundredths: '' });
             // Inputs for Reverse (Decimal to Fraction)
             const [fracInputs, setFracInputs] = useState({ w: '', n: '', d: '' });
+            // Inputs for Conversion (Equivalent Fractions)
+            const [convertInputs, setConvertInputs] = useState({ factor: '', eqN: '' });
 
             useEffect(() => {
                 const saved = localStorage.getItem('decimalOrchardData');
@@ -272,6 +292,7 @@
                 setProblem(generateProblem(levelId));
                 setPvInputs({ ones: '', tenths: '', hundredths: '' });
                 setFracInputs({ w: '', n: '', d: '' });
+                setConvertInputs({ factor: '', eqN: '' });
                 setFeedback({ msg: "Read the fraction and fill in the place value chart.", type: "neutral" });
                 setView('game');
             };
@@ -305,6 +326,40 @@
                             errorMsg = "Check your subtraction. Did you remember to borrow?";
                         }
                         setFeedback({ msg: errorMsg, type: "error" });
+                    }
+                    return;
+                }
+
+                if (problem.type === 'convert') {
+                    const expectedFactor = problem.target / problem.d;
+                    const expectedEqN = problem.n * expectedFactor;
+                    
+                    const expectedT = problem.target === 10 ? expectedEqN : Math.floor(expectedEqN / 10);
+                    const expectedH = problem.target === 100 ? expectedEqN % 10 : 0;
+
+                    const uFactor = parseInt(convertInputs.factor || 0);
+                    const uEqN = parseInt(convertInputs.eqN || 0);
+                    const uOnes = parseInt(pvInputs.ones || 0);
+                    const uTenths = pvInputs.tenths === '' ? -1 : parseInt(pvInputs.tenths);
+                    const uHundredths = pvInputs.hundredths === '' ? -1 : parseInt(pvInputs.hundredths);
+
+                    // Multi-step validation to guide them through the process
+                    if (uFactor !== expectedFactor) {
+                        setFeedback({ msg: `Step 1: How do we get from ${problem.d} to ${problem.target}? Multiply by what?`, type: "error" });
+                        return;
+                    }
+                    if (uEqN !== expectedEqN) {
+                        setFeedback({ msg: `Step 1: Multiply the top by ${expectedFactor} too! (${problem.n} x ${expectedFactor})`, type: "error" });
+                        return;
+                    }
+                    if (uTenths === -1 || (problem.target === 100 && uHundredths === -1)) {
+                        setFeedback({ msg: "Step 2: Now put your new fraction into the Place Value Chart!", type: "error" });
+                        return;
+                    }
+                    if (uOnes === 0 && uTenths === expectedT && uHundredths === expectedH) {
+                        handleSuccess();
+                    } else {
+                        setFeedback({ msg: "Check your decimals in the place value chart. Use your visual grid!", type: "error" });
                     }
                     return;
                 }
@@ -390,6 +445,7 @@
                     setProblem(generateProblem(nextProblemLevel)); // generate next problem
                     setPvInputs({ ones: '', tenths: '', hundredths: '' });
                     setFracInputs({ w: '', n: '', d: '' });
+                    setConvertInputs({ factor: '', eqN: '' });
                     setFeedback({ msg: "Let's try another one!", type: "neutral" });
                 }, 2000);
             };
@@ -446,7 +502,7 @@
                     </div>
                     
                     <button onClick={() => setIsTeacherMode(!isTeacherMode)} className="text-gray-300 hover:text-gray-500 text-sm flex items-center gap-1 mt-8">
-                        <Icon icon={Settings} size={14} /> Teacher Config
+                        <Icon icon={Settings} size={10} /> Teacher Config
                     </button>
                 </div>
             );
@@ -479,10 +535,57 @@
                             {/* Visual/Question Side */}
                             <div className="flex-1 bg-orchard-cream p-8 flex flex-col items-center justify-center border-b md:border-b-0 md:border-r border-gray-200">
                                 <h2 className="text-2xl font-serif text-orchard-deepGreen mb-8 text-center">
-                                    {problem.type === 'arithmetic' ? "Solve the math problem." : (problem.reverse ? "What fraction is this?" : "Convert to a decimal.")}
+                                    {problem.type === 'convert' ? "Convert the tricky fraction." : problem.type === 'arithmetic' ? "Solve the math problem." : (problem.reverse ? "What fraction is this?" : "Convert to a decimal.")}
                                 </h2>
                                 
-                                {problem.type === 'arithmetic' ? (
+                                {problem.type === 'convert' ? (
+                                    <div className="flex flex-col items-center w-full">
+                                        <p className="text-orchard-leaf font-bold uppercase tracking-widest text-sm mb-4">Step 1: Make a Base-10 Fraction</p>
+                                        <div className="flex items-center gap-3 text-4xl font-serif text-orchard-charcoal mb-8 bg-white p-6 rounded-3xl shadow-sm border border-gray-100 pop-in">
+                                            {/* Original Fraction */}
+                                            <div className="flex flex-col items-center">
+                                                <span className="border-b-4 border-current px-2 pb-1 mb-1">{problem.n}</span>
+                                                <span>{problem.d}</span>
+                                            </div>
+                                            
+                                            {/* Multipliers */}
+                                            <div className="flex flex-col items-center justify-between h-24 text-orchard-apple font-bold text-xl px-2">
+                                                <div className="flex items-center gap-1">
+                                                    <span className="text-sm">x</span>
+                                                    <input type="number" 
+                                                        className="w-14 h-10 text-center rounded-lg border-2 border-orchard-apple/30 bg-orange-50/30 focus:border-orchard-apple focus:bg-white" 
+                                                        value={convertInputs.factor} 
+                                                        onChange={e => setConvertInputs({...convertInputs, factor: e.target.value})} 
+                                                    />
+                                                </div>
+                                                <div className="flex items-center gap-1 opacity-70">
+                                                    <span className="text-sm">x</span>
+                                                    <input type="number" 
+                                                        disabled 
+                                                        className="w-14 h-10 text-center rounded-lg border-2 border-transparent bg-gray-50 text-gray-500" 
+                                                        value={convertInputs.factor} 
+                                                    />
+                                                </div>
+                                            </div>
+
+                                            <span>=</span>
+
+                                            {/* Target Fraction */}
+                                            <div className="flex flex-col items-center">
+                                                <input type="number" 
+                                                    className="w-20 h-12 text-center rounded-lg border-2 border-orchard-wood/40 bg-orange-50/30 focus:border-orchard-wood focus:bg-white mb-1 text-3xl" 
+                                                    value={convertInputs.eqN} 
+                                                    onChange={e => setConvertInputs({...convertInputs, eqN: e.target.value})} 
+                                                />
+                                                <div className="w-full border-t-4 border-orchard-charcoal mb-1"></div>
+                                                <span>{problem.target}</span>
+                                            </div>
+                                        </div>
+
+                                        {/* Visual Grid updates dynamically based on what they type in eqN! */}
+                                        <VisualGrid w={0} n={parseInt(convertInputs.eqN || 0)} d={problem.target} />
+                                    </div>
+                                ) : problem.type === 'arithmetic' ? (
                                     <div className="inline-grid grid-cols-5 gap-x-4 gap-y-2 text-6xl font-serif text-center items-center text-orchard-charcoal bg-white p-8 rounded-3xl shadow-sm border border-gray-100 pop-in">
                                         {/* Row 1 */}
                                         <div></div> 
@@ -534,7 +637,7 @@
                                 </div>
 
                                 <div className="mt-16 w-full max-w-md">
-                                    {problem.type === 'arithmetic' || (!problem.reverse) ? (
+                                    {problem.type === 'arithmetic' || problem.type === 'convert' || (!problem.reverse) ? (
                                         /* PLACE VALUE INPUT for Fraction -> Decimal OR Arithmetic Answers */
                                         <div className="flex flex-col items-center w-full gap-6">
                                             <p className="text-gray-500 font-medium mb-2 uppercase tracking-wider text-sm">Place Value Chart</p>
@@ -563,7 +666,7 @@
                                                 </div>
 
                                                 {/* Hundredths (Conditional) */}
-                                                {(problem.type === 'arithmetic' || problem.d === 100) && (
+                                                {(problem.type === 'arithmetic' || problem.d === 100 || (problem.type === 'convert' && problem.target === 100)) && (
                                                     <div className="flex flex-col items-center pop-in">
                                                         <label className="text-xs font-bold text-orchard-wood mb-2">Hundredths</label>
                                                         <input 
