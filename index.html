@@ -93,12 +93,15 @@
          *************************************************************************/
         const TEACHER_CONFIG = {
             questionsToLevelUp: 5, 
-            teacherMode: false, // Set to true to unlock all levels for preview
+            teacherMode: true, // Set to true to unlock all levels for preview
             levels: [
                 { id: 1, name: "Seeds", desc: "Tenths (Fractions to Decimals)", d: 10, mixed: false, reverse: false },
                 { id: 2, name: "Blossoms", desc: "Hundredths (Fractions to Decimals)", d: 100, mixed: false, reverse: false },
                 { id: 3, name: "Apples", desc: "Mixed Numbers to Decimals", d: 'both', mixed: true, reverse: false },
-                { id: 4, name: "Harvest", desc: "Decimals back to Fractions", d: 'both', mixed: true, reverse: true }
+                { id: 4, name: "Harvest", desc: "Decimals back to Fractions", d: 'both', mixed: true, reverse: true },
+                { id: 5, name: "Gathering", desc: "Adding Decimals (regrouping)", type: 'add' },
+                { id: 6, name: "Pruning", desc: "Subtracting Decimals (borrowing)", type: 'sub' },
+                { id: 7, name: "Cider Press", desc: "Add & Subtract Decimals", type: 'mixed_arithmetic' }
             ]
         };
 
@@ -110,6 +113,38 @@
         const generateProblem = (levelId) => {
             const config = TEACHER_CONFIG.levels.find(l => l.id === levelId);
             
+            if (config.type === 'add' || config.type === 'sub' || config.type === 'mixed_arithmetic') {
+                let op = config.type === 'mixed_arithmetic' ? (Math.random() > 0.5 ? '+' : '-') : (config.type === 'add' ? '+' : '-');
+                let w1, t1, h1, w2, t2, h2;
+                
+                if (op === '+') {
+                    // Ensure regrouping
+                    h1 = getRandomInt(1, 9); h2 = getRandomInt(10 - h1, 9);
+                    t1 = getRandomInt(1, 9); t2 = getRandomInt(10 - t1, 9);
+                    w1 = getRandomInt(0, 4); w2 = getRandomInt(0, 4); // Keep sum under 10 for Single-digit Ones box
+                    
+                    // Mix it up slightly so it isn't always double regrouping
+                    if (Math.random() > 0.5) h2 = getRandomInt(0, 9 - h1); 
+                    if (Math.random() > 0.5 && h2 <= 9 - h1) t2 = getRandomInt(10 - t1, 9);
+                } else {
+                    // Ensure borrowing
+                    w1 = getRandomInt(2, 9);
+                    t1 = getRandomInt(0, 8);
+                    h1 = getRandomInt(0, 8);
+                    
+                    w2 = getRandomInt(0, w1 - 1);
+                    t2 = getRandomInt(t1 + 1, 9); 
+                    h2 = getRandomInt(h1 + 1, 9); 
+                    
+                    if (Math.random() > 0.5) h2 = getRandomInt(0, h1); 
+                    if (Math.random() > 0.5 && h2 <= h1) t2 = getRandomInt(t1 + 1, 9); 
+                }
+                
+                const n1 = { w: w1, t: t1, h: h1, val: w1*100 + t1*10 + h1 };
+                const n2 = { w: w2, t: t2, h: h2, val: w2*100 + t2*10 + h2 };
+                return { type: 'arithmetic', n1, n2, op };
+            }
+
             // Determine Denominator
             let d = config.d;
             if (d === 'both') {
@@ -129,7 +164,7 @@
             // Determine Whole Number
             let w = config.mixed ? getRandomInt(1, 5) : 0;
 
-            return { w, n, d, reverse: config.reverse };
+            return { type: 'fraction', w, n, d, reverse: config.reverse };
         };
 
         /*************************************************************************
@@ -242,6 +277,30 @@
             const handleCheck = () => {
                 if (!problem) return;
 
+                if (problem.type === 'arithmetic') {
+                    const expectedVal = problem.op === '+' ? problem.n1.val + problem.n2.val : problem.n1.val - problem.n2.val;
+                    
+                    const expectedW = Math.floor(expectedVal / 100);
+                    const expectedT = Math.floor((expectedVal % 100) / 10);
+                    const expectedH = expectedVal % 10;
+                    
+                    const uOnes = parseInt(pvInputs.ones || 0);
+                    const uTenths = pvInputs.tenths === '' ? -1 : parseInt(pvInputs.tenths);
+                    const uHundredths = pvInputs.hundredths === '' ? -1 : parseInt(pvInputs.hundredths);
+
+                    if (uTenths === -1 || uHundredths === -1) {
+                        setFeedback({ msg: "Please fill in all the place value boxes!", type: "error" });
+                        return;
+                    }
+
+                    if (uOnes === expectedW && uTenths === expectedT && uHundredths === expectedH) {
+                        handleSuccess();
+                    } else {
+                        setFeedback({ msg: "Not quite! Double check your math carefully.", type: "error" });
+                    }
+                    return;
+                }
+
                 if (!problem.reverse) {
                     // Fraction to Decimal Logic
                     const expectedOnes = problem.w;
@@ -311,7 +370,7 @@
                 });
 
                 const nextLevel = (newScore % TEACHER_CONFIG.questionsToLevelUp === 0) 
-                                  ? Math.min(4, userProgress.level + 1) 
+                                  ? Math.min(TEACHER_CONFIG.levels.length, userProgress.level + 1) 
                                   : userProgress.level;
 
                 setUserProgress({ ...userProgress, score: newScore, level: nextLevel, apples: newApples });
@@ -409,18 +468,48 @@
                             {/* Visual/Question Side */}
                             <div className="flex-1 bg-orchard-cream p-8 flex flex-col items-center justify-center border-b md:border-b-0 md:border-r border-gray-200">
                                 <h2 className="text-2xl font-serif text-orchard-deepGreen mb-8 text-center">
-                                    {problem.reverse ? "What fraction is this?" : "Convert to a decimal."}
+                                    {problem.type === 'arithmetic' ? "Solve the math problem." : (problem.reverse ? "What fraction is this?" : "Convert to a decimal.")}
                                 </h2>
                                 
-                                <div className="mb-8 scale-110">
-                                    {problem.reverse ? (
-                                        <DecimalDisplay w={problem.w} n={problem.n} d={problem.d} />
-                                    ) : (
-                                        <Fraction w={problem.w} n={problem.n} d={problem.d} size="lg" />
-                                    )}
-                                </div>
+                                {problem.type === 'arithmetic' ? (
+                                    <div className="inline-grid grid-cols-5 gap-x-4 gap-y-2 text-6xl font-serif text-center items-center text-orchard-charcoal bg-white p-8 rounded-3xl shadow-sm border border-gray-100 pop-in">
+                                        {/* Row 1 */}
+                                        <div></div> 
+                                        <div className="w-12">{problem.n1.w}</div>
+                                        <div className="w-4 text-orchard-apple/50">.</div>
+                                        <div className="w-12">{problem.n1.t}</div>
+                                        <div className="w-12">{problem.n1.h}</div>
+                                        
+                                        {/* Row 2 */}
+                                        <div className="text-left text-orchard-apple">{problem.op}</div>
+                                        <div>{problem.n2.w}</div>
+                                        <div className="text-orchard-apple/50">.</div>
+                                        <div>{problem.n2.t}</div>
+                                        <div>{problem.n2.h}</div>
+                                        
+                                        {/* Divider */}
+                                        <div className="col-span-5 h-2 bg-orchard-charcoal/20 my-2 rounded-full"></div>
+                                        
+                                        {/* Visual aligners for the answer to reinforce where they come from */}
+                                        <div></div>
+                                        <div className="text-sm font-bold text-gray-400 uppercase tracking-widest mt-2">Ones</div>
+                                        <div></div>
+                                        <div className="text-sm font-bold text-orchard-leaf uppercase tracking-widest mt-2">Tenths</div>
+                                        <div className="text-sm font-bold text-orchard-wood uppercase tracking-widest mt-2">Hunds</div>
+                                    </div>
+                                ) : (
+                                    <>
+                                        <div className="mb-8 scale-110">
+                                            {problem.reverse ? (
+                                                <DecimalDisplay w={problem.w} n={problem.n} d={problem.d} />
+                                            ) : (
+                                                <Fraction w={problem.w} n={problem.n} d={problem.d} size="lg" />
+                                            )}
+                                        </div>
 
-                                <VisualGrid w={problem.w} n={problem.n} d={problem.d} />
+                                        <VisualGrid w={problem.w} n={problem.n} d={problem.d} />
+                                    </>
+                                )}
                             </div>
 
                             {/* Input/Interaction Side */}
@@ -434,8 +523,8 @@
                                 </div>
 
                                 <div className="mt-16 w-full max-w-md">
-                                    {!problem.reverse ? (
-                                        /* PLACE VALUE INPUT for Fraction -> Decimal */
+                                    {problem.type === 'arithmetic' || (!problem.reverse) ? (
+                                        /* PLACE VALUE INPUT for Fraction -> Decimal OR Arithmetic Answers */
                                         <div className="flex flex-col items-center w-full gap-6">
                                             <p className="text-gray-500 font-medium mb-2 uppercase tracking-wider text-sm">Place Value Chart</p>
                                             <div className="flex items-end justify-center gap-2 w-full text-center">
@@ -463,7 +552,7 @@
                                                 </div>
 
                                                 {/* Hundredths (Conditional) */}
-                                                {problem.d === 100 && (
+                                                {(problem.type === 'arithmetic' || problem.d === 100) && (
                                                     <div className="flex flex-col items-center pop-in">
                                                         <label className="text-xs font-bold text-orchard-wood mb-2">Hundredths</label>
                                                         <input 
@@ -483,7 +572,6 @@
                                                 {/* Whole Number */}
                                                 <input 
                                                     type="number" min="0"
-                                                    placeholder="Whole"
                                                     className={`w-20 h-24 text-4xl text-center rounded-xl border-2 border-gray-200 focus:border-orchard-apple transition-all font-serif ${problem.w === 0 ? 'opacity-50' : ''}`}
                                                     value={fracInputs.w} onChange={e => setFracInputs({...fracInputs, w: e.target.value})}
                                                 />
