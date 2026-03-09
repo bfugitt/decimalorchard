@@ -1,0 +1,537 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>The Decimal Orchard</title>
+    
+    <!-- React and ReactDOM -->
+    <script crossorigin src="https://unpkg.com/react@18/umd/react.development.js"></script>
+    <script crossorigin src="https://unpkg.com/react-dom@18/umd/react-dom.development.js"></script>
+    
+    <!-- Babel for JSX -->
+    <script src="https://unpkg.com/@babel/standalone/babel.min.js"></script>
+    
+    <!-- Tailwind CSS -->
+    <script src="https://cdn.tailwindcss.com"></script>
+    
+    <!-- Lucide Icons -->
+    <script src="https://unpkg.com/lucide@latest"></script>
+
+    <!-- Google Fonts: Quicksand for that clean, organic Reggio feel -->
+    <link href="https://fonts.googleapis.com/css2?family=Quicksand:wght@400;500;600;700&display=swap" rel="stylesheet">
+
+    <style>
+        body {
+            font-family: 'Quicksand', sans-serif;
+            background-color: #fdf8f5; /* Warm, soft blush/cream */
+            color: #4a4a4a;
+        }
+        
+        /* Custom Reggio-inspired Scrollbar */
+        ::-webkit-scrollbar {
+            width: 8px;
+        }
+        ::-webkit-scrollbar-track {
+            background: #f1f1f1; 
+        }
+        ::-webkit-scrollbar-thumb {
+            background: #e07a5f; /* Terracotta */
+            border-radius: 4px;
+        }
+
+        /* Animation classes */
+        .fade-in { animation: fadeIn 0.5s ease-in; }
+        @keyframes fadeIn { from { opacity: 0; transform: translateY(10px); } to { opacity: 1; transform: translateY(0); } }
+        
+        .pop-in { animation: popIn 0.3s cubic-bezier(0.175, 0.885, 0.32, 1.275); }
+        @keyframes popIn { from { opacity: 0; transform: scale(0.8); } to { opacity: 1; transform: scale(1); } }
+
+        input:focus {
+            outline: none;
+            box-shadow: 0 0 0 3px rgba(224, 122, 95, 0.4);
+        }
+
+        /* Hide number input arrows */
+        input[type=number]::-webkit-inner-spin-button, 
+        input[type=number]::-webkit-outer-spin-button { 
+            -webkit-appearance: none; 
+            margin: 0; 
+        }
+        input[type=number] {
+            -moz-appearance: textfield;
+        }
+    </style>
+
+    <script>
+        tailwind.config = {
+            theme: {
+                extend: {
+                    colors: {
+                        orchard: {
+                            cream: '#fdf8f5',
+                            stone: '#e6e4df',
+                            leaf: '#81b29a',
+                            deepGreen: '#3d5a80',
+                            apple: '#e07a5f',
+                            wood: '#f2cc8f',
+                            charcoal: '#3d405b'
+                        }
+                    }
+                }
+            }
+        }
+    </script>
+</head>
+<body>
+    <div id="root"></div>
+
+    <script type="text/babel">
+
+        /*************************************************************************
+         * TEACHER CONFIGURATION SECTION
+         *************************************************************************/
+        const TEACHER_CONFIG = {
+            questionsToLevelUp: 5, 
+            teacherMode: false, // Set to true to unlock all levels for preview
+            levels: [
+                { id: 1, name: "Seeds", desc: "Tenths (Fractions to Decimals)", d: 10, mixed: false, reverse: false },
+                { id: 2, name: "Blossoms", desc: "Hundredths (Fractions to Decimals)", d: 100, mixed: false, reverse: false },
+                { id: 3, name: "Apples", desc: "Mixed Numbers to Decimals", d: 'both', mixed: true, reverse: false },
+                { id: 4, name: "Harvest", desc: "Decimals back to Fractions", d: 'both', mixed: true, reverse: true }
+            ]
+        };
+
+        /*************************************************************************
+         * HELPER FUNCTIONS
+         *************************************************************************/
+        const getRandomInt = (min, max) => Math.floor(Math.random() * (max - min + 1)) + min;
+
+        const generateProblem = (levelId) => {
+            const config = TEACHER_CONFIG.levels.find(l => l.id === levelId);
+            
+            // Determine Denominator
+            let d = config.d;
+            if (d === 'both') {
+                d = Math.random() > 0.5 ? 10 : 100;
+            }
+
+            // Determine Numerator
+            let n;
+            if (d === 10) {
+                n = getRandomInt(1, 9);
+            } else {
+                n = getRandomInt(1, 99);
+                // Ensure we get some single-digit hundredths (e.g. 5/100) for practice
+                if (Math.random() > 0.7) n = getRandomInt(1, 9); 
+            }
+
+            // Determine Whole Number
+            let w = config.mixed ? getRandomInt(1, 5) : 0;
+
+            return { w, n, d, reverse: config.reverse };
+        };
+
+        /*************************************************************************
+         * ICONS & UI COMPONENTS
+         *************************************************************************/
+        const lucideIcons = window.lucide && window.lucide.icons ? window.lucide.icons : {};
+        const { Apple, Leaf, TreePine, Info, Settings, RotateCcw, CheckCircle, Lock, ArrowRight, Star } = lucideIcons;
+
+        const Icon = ({ icon, size = 24, className = "" }) => {
+            if (!icon || !Array.isArray(icon)) return null;
+            return (
+                <svg xmlns="http://www.w3.org/2000/svg" width={size} height={size} viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" className={className}>
+                    {icon.map(([tag, attrs], index) => React.createElement(tag, { ...attrs, key: index }))}
+                </svg>
+            );
+        };
+
+        const Fraction = ({ w, n, d, size = "md", color = "text-orchard-charcoal" }) => {
+            const sizeClass = size === "lg" ? "text-5xl" : "text-3xl";
+            const wholeClass = size === "lg" ? "text-6xl mr-3" : "text-4xl mr-2";
+            return (
+                <div className={`flex items-center font-bold ${color} ${sizeClass} font-serif`}>
+                    {w > 0 && <span className={wholeClass}>{w}</span>}
+                    {n !== null && (
+                        <div className="flex flex-col items-center leading-none">
+                            <span className="border-b-4 border-current px-2 pb-1 mb-1">{n}</span>
+                            <span>{d}</span>
+                        </div>
+                    )}
+                </div>
+            );
+        };
+
+        const DecimalDisplay = ({ w, n, d, size = "lg", color = "text-orchard-charcoal" }) => {
+            let decStr = "";
+            if (d === 10) decStr = `${w}.${n}`;
+            if (d === 100) decStr = `${w}.${n < 10 ? '0' + n : n}`;
+            return (
+                <div className={`font-bold ${color} ${size === 'lg' ? 'text-6xl' : 'text-4xl'} font-serif tracking-widest`}>
+                    {decStr}
+                </div>
+            );
+        };
+
+        // VISUAL COMPONENT: Base-10 Grids
+        const VisualGrid = ({ w, n, d }) => {
+            const renderGrid = (isWhole, numFilled) => {
+                if (d === 10) {
+                    // Tenths Grid (10 vertical bars)
+                    return (
+                        <div className="w-24 h-24 border-2 border-orchard-charcoal flex shadow-sm bg-white pop-in">
+                            {Array.from({length: 10}).map((_, i) => (
+                                <div key={i} className={`flex-1 border-r border-gray-200 last:border-r-0 ${i < numFilled ? 'bg-orchard-leaf opacity-80' : 'bg-transparent'}`}></div>
+                            ))}
+                        </div>
+                    );
+                } else {
+                    // Hundredths Grid (10x10 grid)
+                    return (
+                        <div className="w-24 h-24 border-2 border-orchard-charcoal grid grid-cols-10 grid-rows-10 shadow-sm bg-white pop-in">
+                            {Array.from({length: 100}).map((_, i) => (
+                                <div key={i} className={`border-[0.5px] border-gray-200 ${i < numFilled ? 'bg-orchard-wood opacity-90' : 'bg-transparent'}`}></div>
+                            ))}
+                        </div>
+                    );
+                }
+            };
+
+            return (
+                <div className="flex flex-wrap gap-4 justify-center items-center my-4">
+                    {Array.from({length: w}).map((_, i) => (
+                        <div key={`w-${i}`}>{renderGrid(true, d)}</div>
+                    ))}
+                    {n > 0 && <div>{renderGrid(false, n)}</div>}
+                </div>
+            );
+        };
+
+        const { useState, useEffect } = React;
+
+        function App() {
+            const [userProgress, setUserProgress] = useState({ level: 1, score: 0, apples: [] });
+            const [view, setView] = useState('menu');
+            const [problem, setProblem] = useState(null);
+            const [feedback, setFeedback] = useState({ msg: "", type: "neutral" });
+            const [isTeacherMode, setIsTeacherMode] = useState(TEACHER_CONFIG.teacherMode);
+
+            // Inputs for Place Value Chart
+            const [pvInputs, setPvInputs] = useState({ ones: '', tenths: '', hundredths: '' });
+            // Inputs for Reverse (Decimal to Fraction)
+            const [fracInputs, setFracInputs] = useState({ w: '', n: '', d: '' });
+
+            useEffect(() => {
+                const saved = localStorage.getItem('decimalOrchardData');
+                if (saved) setUserProgress(JSON.parse(saved));
+            }, []);
+
+            useEffect(() => {
+                localStorage.setItem('decimalOrchardData', JSON.stringify(userProgress));
+            }, [userProgress]);
+
+            const startGame = (levelId) => {
+                setProblem(generateProblem(levelId));
+                setPvInputs({ ones: '', tenths: '', hundredths: '' });
+                setFracInputs({ w: '', n: '', d: '' });
+                setFeedback({ msg: "Read the fraction and fill in the place value chart.", type: "neutral" });
+                setView('game');
+            };
+
+            const handleCheck = () => {
+                if (!problem) return;
+
+                if (!problem.reverse) {
+                    // Fraction to Decimal Logic
+                    const expectedOnes = problem.w;
+                    const expectedTenths = problem.d === 10 ? problem.n : Math.floor(problem.n / 10);
+                    const expectedHundredths = problem.d === 100 ? problem.n % 10 : 0;
+
+                    const uOnes = parseInt(pvInputs.ones || 0);
+                    const uTenths = pvInputs.tenths === '' ? -1 : parseInt(pvInputs.tenths);
+                    const uHundredths = pvInputs.hundredths === '' ? -1 : parseInt(pvInputs.hundredths);
+
+                    if (uTenths === -1) {
+                        setFeedback({ msg: "Don't forget the tenths place!", type: "error" });
+                        return;
+                    }
+
+                    if (problem.d === 100 && uHundredths === -1) {
+                         setFeedback({ msg: "For hundredths, you need to fill in the hundredths place!", type: "error" });
+                         return;
+                    }
+
+                    if (uOnes === expectedOnes && uTenths === expectedTenths && (problem.d === 10 || uHundredths === expectedHundredths)) {
+                        handleSuccess();
+                    } else {
+                        // Helpful specific feedback
+                        if (uOnes !== expectedOnes) {
+                            setFeedback({ msg: "Check your Ones (Whole number) place.", type: "error" });
+                        } else if (problem.d === 100 && problem.n < 10 && uTenths !== 0) {
+                            setFeedback({ msg: `Careful! ${problem.n}/100 means zero tenths and ${problem.n} hundredths.`, type: "error" });
+                        } else {
+                            setFeedback({ msg: "Not quite. Look closely at the grid!", type: "error" });
+                        }
+                    }
+                } else {
+                    // Decimal to Fraction Logic
+                    const expectedW = problem.w;
+                    const expectedN = problem.n;
+                    const expectedD = problem.d;
+
+                    const uW = parseInt(fracInputs.w || 0);
+                    const uN = parseInt(fracInputs.n || 0);
+                    const uD = parseInt(fracInputs.d || 0);
+
+                    if (uW === expectedW && uN === expectedN && uD === expectedD) {
+                        handleSuccess();
+                    } else {
+                        if (uW !== expectedW) {
+                            setFeedback({ msg: "Check the whole number.", type: "error" });
+                        } else if (uD !== expectedD) {
+                            setFeedback({ msg: `Look at the last decimal place. Is it tenths or hundredths?`, type: "error" });
+                        } else {
+                            setFeedback({ msg: "Check your numerator.", type: "error" });
+                        }
+                    }
+                }
+            };
+
+            const handleSuccess = () => {
+                setFeedback({ msg: "Excellent! You harvested an apple!", type: "success" });
+                const newScore = userProgress.score + 1;
+                const newApples = [...userProgress.apples];
+                if (newScore % 2 === 0) newApples.push(Date.now()); // Visual reward
+                
+                const currentLevelConfig = TEACHER_CONFIG.levels.find(l => {
+                    // Find which level we are currently on based on config matching (simplified)
+                    // Better approach: just use the user's highest level progressed
+                    return true;
+                });
+
+                const nextLevel = (newScore % TEACHER_CONFIG.questionsToLevelUp === 0) 
+                                  ? Math.min(4, userProgress.level + 1) 
+                                  : userProgress.level;
+
+                setUserProgress({ ...userProgress, score: newScore, level: nextLevel, apples: newApples });
+                
+                setTimeout(() => {
+                    setProblem(generateProblem(nextLevel === userProgress.level ? nextLevel : nextLevel)); // generate next problem
+                    setPvInputs({ ones: '', tenths: '', hundredths: '' });
+                    setFracInputs({ w: '', n: '', d: '' });
+                    setFeedback({ msg: "Let's try another one!", type: "neutral" });
+                }, 2000);
+            };
+
+            /* ---------------- VIEWS ---------------- */
+            const renderMenu = () => (
+                <div className="flex flex-col items-center justify-center min-h-screen p-4 max-w-4xl mx-auto space-y-8">
+                    <header className="text-center fade-in">
+                        <div className="flex justify-center mb-4">
+                            <Icon icon={Apple} size={64} className="text-orchard-apple" />
+                        </div>
+                        <h1 className="text-5xl md:text-6xl font-bold text-orchard-deepGreen mb-3 tracking-tight font-serif">The Decimal Orchard</h1>
+                        <p className="text-xl text-orchard-charcoal opacity-80">Connecting fractions and decimals.</p>
+                        {isTeacherMode && <span className="bg-orchard-wood text-orchard-charcoal text-xs px-3 py-1 rounded-full uppercase tracking-wide font-bold mt-2 inline-block shadow-sm">Teacher Mode Active</span>}
+                    </header>
+
+                    <div className="grid grid-cols-1 md:grid-cols-2 gap-6 w-full fade-in">
+                        {TEACHER_CONFIG.levels.map((lvl) => {
+                            const isLocked = !isTeacherMode && lvl.id > userProgress.level;
+                            return (
+                                <button 
+                                    key={lvl.id} 
+                                    onClick={() => startGame(lvl.id)} 
+                                    className={`relative p-6 rounded-2xl shadow-md border-b-4 transition-all duration-200 flex flex-col items-start ${isLocked ? 'bg-gray-100 border-gray-300 text-gray-400 cursor-not-allowed' : 'bg-white border-orchard-leaf hover:bg-green-50 hover:-translate-y-1'}`}
+                                    disabled={isLocked}
+                                >
+                                    <div className="flex justify-between w-full mb-3">
+                                        <div className="flex items-center gap-3">
+                                            {isLocked ? <Icon icon={Lock} size={20} /> : <Icon icon={Leaf} size={20} className="text-orchard-leaf" />}
+                                            <span className="font-bold text-2xl font-serif text-orchard-deepGreen">{lvl.name}</span>
+                                        </div>
+                                        {(!isLocked && lvl.id < userProgress.level) && <Icon icon={CheckCircle} className="text-orchard-leaf" />}
+                                    </div>
+                                    <p className="text-base text-left text-gray-600">{lvl.desc}</p>
+                                    
+                                    {/* Progress indicator for current level */}
+                                    {!isLocked && lvl.id === userProgress.level && (
+                                        <div className="w-full mt-4 h-2 bg-gray-200 rounded-full overflow-hidden">
+                                            <div 
+                                                className="h-full bg-orchard-apple transition-all duration-500" 
+                                                style={{ width: `${((userProgress.score % TEACHER_CONFIG.questionsToLevelUp) / TEACHER_CONFIG.questionsToLevelUp) * 100}%`}}
+                                            ></div>
+                                        </div>
+                                    )}
+                                </button>
+                            )
+                        })}
+                    </div>
+
+                    <div className="flex flex-wrap gap-2 justify-center mt-8 p-6 bg-white rounded-3xl shadow-sm border border-gray-100 w-full min-h-[100px] fade-in items-center">
+                        <span className="text-gray-400 font-medium mr-4">Your Basket:</span>
+                        {userProgress.apples.length === 0 && <span className="text-gray-300 italic">Empty. Start playing to harvest apples!</span>}
+                        {userProgress.apples.map(a => <Icon key={a} icon={Apple} className="text-orchard-apple pop-in" size={28} />)}
+                    </div>
+                    
+                    <button onClick={() => setIsTeacherMode(!isTeacherMode)} className="text-gray-300 hover:text-gray-500 text-sm flex items-center gap-1 mt-8">
+                        <Icon icon={Settings} size={14} /> Teacher Config
+                    </button>
+                </div>
+            );
+
+            const renderGame = () => {
+                if (!problem) return null;
+
+                const fbColors = {
+                    neutral: "bg-blue-50 border-blue-200 text-blue-800",
+                    success: "bg-green-50 border-green-300 text-green-800",
+                    error: "bg-red-50 border-red-300 text-red-800"
+                };
+
+                return (
+                    <div className="flex flex-col min-h-screen">
+                        {/* Header Navbar */}
+                        <header className="bg-white px-6 py-4 shadow-sm flex justify-between items-center z-10">
+                            <button onClick={() => setView('menu')} className="text-gray-500 hover:text-orchard-deepGreen font-bold flex items-center gap-2 transition-colors">
+                                <Icon icon={ArrowRight} className="rotate-180" size={20}/> Orchard Menu
+                            </button>
+                            <div className="flex items-center gap-3 font-bold text-orchard-apple text-xl">
+                                <Icon icon={Apple} size={24} /> 
+                                {userProgress.score}
+                            </div>
+                        </header>
+
+                        {/* Main Game Area */}
+                        <main className="flex-grow flex flex-col md:flex-row items-stretch">
+                            
+                            {/* Visual/Question Side */}
+                            <div className="flex-1 bg-orchard-cream p-8 flex flex-col items-center justify-center border-b md:border-b-0 md:border-r border-gray-200">
+                                <h2 className="text-2xl font-serif text-orchard-deepGreen mb-8 text-center">
+                                    {problem.reverse ? "What fraction is this?" : "Convert to a decimal."}
+                                </h2>
+                                
+                                <div className="mb-8 scale-110">
+                                    {problem.reverse ? (
+                                        <DecimalDisplay w={problem.w} n={problem.n} d={problem.d} />
+                                    ) : (
+                                        <Fraction w={problem.w} n={problem.n} d={problem.d} size="lg" />
+                                    )}
+                                </div>
+
+                                <VisualGrid w={problem.w} n={problem.n} d={problem.d} />
+                            </div>
+
+                            {/* Input/Interaction Side */}
+                            <div className="flex-1 bg-white p-8 flex flex-col items-center justify-center relative">
+                                
+                                {/* Feedback Banner */}
+                                <div className={`absolute top-8 left-8 right-8 p-4 rounded-xl border ${fbColors[feedback.type]} transition-colors duration-300 flex items-center gap-3 font-medium`}>
+                                    {feedback.type === 'success' && <Icon icon={Star} className="text-yellow-500" />}
+                                    {feedback.type === 'error' && <Icon icon={RotateCcw} />}
+                                    {feedback.msg}
+                                </div>
+
+                                <div className="mt-16 w-full max-w-md">
+                                    {!problem.reverse ? (
+                                        /* PLACE VALUE INPUT for Fraction -> Decimal */
+                                        <div className="flex flex-col items-center w-full gap-6">
+                                            <p className="text-gray-500 font-medium mb-2 uppercase tracking-wider text-sm">Place Value Chart</p>
+                                            <div className="flex items-end justify-center gap-2 w-full text-center">
+                                                {/* Ones */}
+                                                <div className="flex flex-col items-center">
+                                                    <label className="text-xs font-bold text-gray-400 mb-2">Ones</label>
+                                                    <input 
+                                                        type="number" min="0" max="9"
+                                                        className="w-16 h-20 text-4xl text-center rounded-xl border-2 border-gray-200 bg-gray-50 focus:border-orchard-apple focus:bg-white transition-all font-serif"
+                                                        value={pvInputs.ones} onChange={e => setPvInputs({...pvInputs, ones: e.target.value})}
+                                                    />
+                                                </div>
+                                                
+                                                {/* Decimal Point */}
+                                                <div className="text-6xl text-orchard-charcoal font-serif px-1 pb-2">.</div>
+                                                
+                                                {/* Tenths */}
+                                                <div className="flex flex-col items-center">
+                                                    <label className="text-xs font-bold text-orchard-leaf mb-2">Tenths</label>
+                                                    <input 
+                                                        type="number" min="0" max="9"
+                                                        className="w-16 h-20 text-4xl text-center rounded-xl border-2 border-orchard-leaf/30 bg-green-50/30 focus:border-orchard-leaf focus:bg-white transition-all font-serif"
+                                                        value={pvInputs.tenths} onChange={e => setPvInputs({...pvInputs, tenths: e.target.value})}
+                                                    />
+                                                </div>
+
+                                                {/* Hundredths (Conditional) */}
+                                                {problem.d === 100 && (
+                                                    <div className="flex flex-col items-center pop-in">
+                                                        <label className="text-xs font-bold text-orchard-wood mb-2">Hundredths</label>
+                                                        <input 
+                                                            type="number" min="0" max="9"
+                                                            className="w-16 h-20 text-4xl text-center rounded-xl border-2 border-orchard-wood/40 bg-orange-50/30 focus:border-orchard-wood focus:bg-white transition-all font-serif"
+                                                            value={pvInputs.hundredths} onChange={e => setPvInputs({...pvInputs, hundredths: e.target.value})}
+                                                        />
+                                                    </div>
+                                                )}
+                                            </div>
+                                        </div>
+                                    ) : (
+                                        /* FRACTION INPUT for Decimal -> Fraction */
+                                        <div className="flex flex-col items-center w-full gap-6">
+                                            <p className="text-gray-500 font-medium mb-2 uppercase tracking-wider text-sm">Write the Fraction</p>
+                                            <div className="flex items-center justify-center gap-4">
+                                                {/* Whole Number */}
+                                                <input 
+                                                    type="number" min="0"
+                                                    placeholder="Whole"
+                                                    className={`w-20 h-24 text-4xl text-center rounded-xl border-2 border-gray-200 focus:border-orchard-apple transition-all font-serif ${problem.w === 0 ? 'opacity-50' : ''}`}
+                                                    value={fracInputs.w} onChange={e => setFracInputs({...fracInputs, w: e.target.value})}
+                                                />
+                                                {/* Fraction Part */}
+                                                <div className="flex flex-col gap-2">
+                                                    <input 
+                                                        type="number" min="1" max="99"
+                                                        className="w-24 h-16 text-3xl text-center rounded-xl border-2 border-gray-200 focus:border-orchard-apple transition-all font-serif"
+                                                        value={fracInputs.n} onChange={e => setFracInputs({...fracInputs, n: e.target.value})}
+                                                    />
+                                                    <div className="h-1 w-full bg-orchard-charcoal rounded-full"></div>
+                                                    <select 
+                                                        className="w-24 h-16 text-2xl text-center rounded-xl border-2 border-gray-200 focus:border-orchard-apple transition-all font-serif bg-white appearance-none cursor-pointer"
+                                                        value={fracInputs.d} onChange={e => setFracInputs({...fracInputs, d: e.target.value})}
+                                                    >
+                                                        <option value="">--</option>
+                                                        <option value="10">10</option>
+                                                        <option value="100">100</option>
+                                                    </select>
+                                                </div>
+                                            </div>
+                                        </div>
+                                    )}
+
+                                    <button 
+                                        onClick={handleCheck}
+                                        className="w-full mt-10 bg-orchard-deepGreen hover:bg-orchard-charcoal text-white font-bold py-5 px-8 rounded-2xl shadow-lg transition-all active:scale-95 text-xl tracking-wide flex justify-center items-center gap-2"
+                                    >
+                                        <Icon icon={CheckCircle} /> Check Answer
+                                    </button>
+                                </div>
+                            </div>
+                        </main>
+                    </div>
+                );
+            };
+
+            return (
+                <div className="min-h-screen text-orchard-charcoal">
+                    {view === 'menu' && renderMenu()}
+                    {view === 'game' && renderGame()}
+                </div>
+            );
+        }
+
+        const root = ReactDOM.createRoot(document.getElementById('root'));
+        root.render(<App />);
+
+    </script>
+</body>
+</html>
