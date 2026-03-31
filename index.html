@@ -93,7 +93,7 @@
          *************************************************************************/
         const TEACHER_CONFIG = {
             questionsToLevelUp: 5, 
-            teacherMode: false, // Set to true to unlock all levels for preview
+            teacherMode: true, // Set to true to unlock all levels for preview
             levels: [
                 { id: 1, name: "Seeds", desc: "Tenths (Fractions to Decimals)", d: 10, mixed: false, reverse: false },
                 { id: 2, name: "Blossoms", desc: "Hundredths (Fractions to Decimals)", d: 100, mixed: false, reverse: false },
@@ -102,7 +102,9 @@
                 { id: 5, name: "Gathering", desc: "Adding Decimals (regrouping)", type: 'add' },
                 { id: 6, name: "Pruning", desc: "Subtracting Decimals (borrowing)", type: 'sub' },
                 { id: 7, name: "Cider Press", desc: "Add & Subtract Decimals", type: 'mixed_arithmetic' },
-                { id: 8, name: "The Grafting Shed", desc: "Convert tricky fractions (1/4, 1/2)", type: 'convert' }
+                { id: 8, name: "The Grafting Shed", desc: "Convert tricky fractions (1/4, 1/2)", type: 'convert' },
+                { id: 9, name: "The Surveyor", desc: "Number Line (Tenths)", type: 'numberline', d: 10 },
+                { id: 10, name: "Magnifying Glass", desc: "Number Line Zoom (Hundredths)", type: 'numberline', d: 100 }
             ]
         };
 
@@ -114,6 +116,19 @@
         const generateProblem = (levelId) => {
             const config = TEACHER_CONFIG.levels.find(l => l.id === levelId);
             
+            if (config.type === 'numberline') {
+                const w = getRandomInt(1, 4);
+                let n;
+                if (config.d === 10) {
+                    n = getRandomInt(1, 9);
+                } else {
+                    n = getRandomInt(1, 99);
+                    // Ensure it doesn't land perfectly on a tenth to force the zoom mechanic
+                    if (n % 10 === 0) n += getRandomInt(1, 9); 
+                }
+                return { type: 'numberline', w, n, d: config.d };
+            }
+
             if (config.type === 'add' || config.type === 'sub' || config.type === 'mixed_arithmetic') {
                 let op = config.type === 'mixed_arithmetic' ? (Math.random() > 0.5 ? '+' : '-') : (config.type === 'add' ? '+' : '-');
                 let w1, t1, h1, w2, t2, h2;
@@ -189,7 +204,7 @@
          * ICONS & UI COMPONENTS
          *************************************************************************/
         const lucideIcons = window.lucide && window.lucide.icons ? window.lucide.icons : {};
-        const { Apple, Leaf, TreePine, Info, Settings, RotateCcw, CheckCircle, Lock, ArrowRight, Star } = lucideIcons;
+        const { Apple, Leaf, TreePine, Info, Settings, RotateCcw, CheckCircle, Lock, ArrowRight, Star, Search } = lucideIcons;
 
         const Icon = ({ icon, size = 24, className = "" }) => {
             if (!icon || !Array.isArray(icon)) return null;
@@ -277,6 +292,8 @@
             const [fracInputs, setFracInputs] = useState({ w: '', n: '', d: '' });
             // Inputs for Conversion (Equivalent Fractions)
             const [convertInputs, setConvertInputs] = useState({ factor: '', eqN: '' });
+            // State for Number Line
+            const [nlState, setNlState] = useState({ step: 1, tenthSegment: null, tick: null });
 
             useEffect(() => {
                 const saved = localStorage.getItem('decimalOrchardData');
@@ -293,12 +310,57 @@
                 setPvInputs({ ones: '', tenths: '', hundredths: '' });
                 setFracInputs({ w: '', n: '', d: '' });
                 setConvertInputs({ factor: '', eqN: '' });
-                setFeedback({ msg: "Read the fraction and fill in the place value chart.", type: "neutral" });
+                setNlState({ step: 1, tenthSegment: null, tick: null });
+                
+                const lvlType = TEACHER_CONFIG.levels.find(l=>l.id===levelId).type;
+                if (lvlType === 'numberline') {
+                    setFeedback({ msg: "Locate the value on the number line.", type: "neutral" });
+                } else {
+                    setFeedback({ msg: "Read the fraction and fill in the place value chart.", type: "neutral" });
+                }
                 setView('game');
+            };
+
+            const handleZoom = () => {
+                if (nlState.tenthSegment === null) {
+                    setFeedback({ msg: "Select the space between two numbers first!", type: "error" });
+                    return;
+                }
+                const expectedSegment = Math.floor(problem.n / 10);
+                if (nlState.tenthSegment === expectedSegment) {
+                    setNlState({ ...nlState, step: 2, tick: null });
+                    setFeedback({ msg: "Great job! Let's zoom in and find the hundredths.", type: "success" });
+                } else {
+                    const lower = `${problem.w}.${nlState.tenthSegment}`;
+                    const upper = nlState.tenthSegment === 9 ? `${problem.w + 1}.0` : `${problem.w}.${nlState.tenthSegment + 1}`;
+                    setFeedback({ msg: `Not quite! Does it really live between ${lower} and ${upper}?`, type: "error" });
+                }
             };
 
             const handleCheck = () => {
                 if (!problem) return;
+
+                if (problem.type === 'numberline') {
+                    if (problem.d === 10) {
+                        if (nlState.tick === problem.n) {
+                            handleSuccess();
+                        } else {
+                            setFeedback({ msg: "Check your point on the number line again.", type: "error" });
+                        }
+                    } else { // d === 100, step 2
+                        if (nlState.tick === null) {
+                            setFeedback({ msg: "Click on a tick mark to set your answer!", type: "error" });
+                            return;
+                        }
+                        const expectedTick = problem.n % 10;
+                        if (nlState.tick === expectedTick) {
+                            handleSuccess();
+                        } else {
+                            setFeedback({ msg: "Not quite. Count the hundredths carefully from the left!", type: "error" });
+                        }
+                    }
+                    return;
+                }
 
                 if (problem.type === 'arithmetic') {
                     const expectedVal = problem.op === '+' ? problem.n1.val + problem.n2.val : problem.n1.val - problem.n2.val;
@@ -446,6 +508,7 @@
                     setPvInputs({ ones: '', tenths: '', hundredths: '' });
                     setFracInputs({ w: '', n: '', d: '' });
                     setConvertInputs({ factor: '', eqN: '' });
+                    setNlState({ step: 1, tenthSegment: null, tick: null });
                     setFeedback({ msg: "Let's try another one!", type: "neutral" });
                 }, 2000);
             };
@@ -534,11 +597,28 @@
                             
                             {/* Visual/Question Side */}
                             <div className="flex-1 bg-orchard-cream p-8 flex flex-col items-center justify-center border-b md:border-b-0 md:border-r border-gray-200">
-                                <h2 className="text-2xl font-serif text-orchard-deepGreen mb-8 text-center">
-                                    {problem.type === 'convert' ? "Convert the tricky fraction." : problem.type === 'arithmetic' ? "Solve the math problem." : (problem.reverse ? "What fraction is this?" : "Convert to a decimal.")}
-                                </h2>
+                                {problem.type !== 'numberline' && (
+                                    <h2 className="text-2xl font-serif text-orchard-deepGreen mb-8 text-center">
+                                        {problem.type === 'convert' ? "Convert the tricky fraction." : problem.type === 'arithmetic' ? "Solve the math problem." : (problem.reverse ? "What fraction is this?" : "Convert to a decimal.")}
+                                    </h2>
+                                )}
                                 
-                                {problem.type === 'convert' ? (
+                                {problem.type === 'numberline' ? (
+                                    <div className="flex flex-col items-center justify-center pop-in w-full">
+                                        <h3 className="text-xl text-orchard-leaf font-bold uppercase tracking-widest mb-8 text-center">
+                                            Find this value:
+                                        </h3>
+                                        <div className="flex flex-col items-center gap-4 bg-white p-10 rounded-3xl shadow-sm border border-gray-100">
+                                            <Fraction w={problem.w} n={problem.n} d={problem.d} size="lg" />
+                                            <div className="flex items-center gap-4 text-gray-300">
+                                                <div className="w-16 h-1 bg-gray-200 rounded-full"></div>
+                                                <span className="text-3xl font-serif">=</span>
+                                                <div className="w-16 h-1 bg-gray-200 rounded-full"></div>
+                                            </div>
+                                            <DecimalDisplay w={problem.w} n={problem.n} d={problem.d} size="lg" />
+                                        </div>
+                                    </div>
+                                ) : problem.type === 'convert' ? (
                                     <div className="flex flex-col items-center w-full">
                                         <p className="text-orchard-leaf font-bold uppercase tracking-widest text-sm mb-4">Step 1: Make a Base-10 Fraction</p>
                                         <div className="flex items-center gap-3 text-4xl font-serif text-orchard-charcoal mb-8 bg-white p-6 rounded-3xl shadow-sm border border-gray-100 pop-in">
@@ -637,7 +717,78 @@
                                 </div>
 
                                 <div className="mt-16 w-full max-w-md">
-                                    {problem.type === 'arithmetic' || problem.type === 'convert' || (!problem.reverse) ? (
+                                    {problem.type === 'numberline' ? (
+                                        /* NUMBER LINE UI */
+                                        <div className="flex flex-col items-center w-full gap-8 pop-in">
+                                            <p className="text-gray-500 font-medium uppercase tracking-wider text-sm mb-2 text-center">
+                                                {problem.d === 100 && nlState.step === 1 ? "Step 1: Which tenths does it live between?" : "Click the exact point on the line"}
+                                            </p>
+                                            
+                                            <div className="relative w-full max-w-[28rem] h-32 flex items-center mb-4">
+                                                {/* Background Main Line */}
+                                                <div className="absolute left-0 right-0 h-1 bg-orchard-charcoal"></div>
+                                                
+                                                {/* Ticks and Segments */}
+                                                <div className="relative z-10 w-full flex">
+                                                    {Array.from({length: 10}).map((_, i) => {
+                                                        const isStep1 = problem.d === 100 && nlState.step === 1;
+                                                        
+                                                        // Determine the label for this specific tick mark
+                                                        let label = "";
+                                                        if (problem.d === 10 || isStep1) {
+                                                            label = `${problem.w}.${i}`;
+                                                        } else {
+                                                            label = `${problem.w}.${nlState.tenthSegment}${i}`;
+                                                        }
+
+                                                        return (
+                                                            <div key={i} className="flex-1 relative flex justify-center items-center">
+                                                                {/* Tick Left */}
+                                                                <div className="absolute left-0 -translate-x-1/2 flex flex-col items-center z-20">
+                                                                    <button 
+                                                                        onClick={() => !isStep1 && setNlState({...nlState, tick: i})}
+                                                                        disabled={isStep1}
+                                                                        className={`transition-all rounded-full ${
+                                                                            isStep1 ? 'w-1 h-6 bg-orchard-charcoal cursor-default' :
+                                                                            nlState.tick === i ? 'w-3 h-8 bg-orchard-apple ring-4 ring-orchard-apple/30' : 'w-1 h-6 bg-orchard-charcoal hover:bg-orchard-apple hover:h-8 hover:w-2 cursor-pointer'
+                                                                        }`}
+                                                                    ></button>
+                                                                    <span className={`mt-3 text-sm font-bold absolute top-8 whitespace-nowrap ${nlState.tick === i ? 'text-orchard-apple text-base' : 'text-gray-500'}`}>
+                                                                        {label}
+                                                                    </span>
+                                                                </div>
+
+                                                                {/* Clickable Gap Area (Only for Step 1) */}
+                                                                {isStep1 && (
+                                                                    <button 
+                                                                        onClick={() => setNlState({...nlState, tenthSegment: i})}
+                                                                        className={`absolute inset-0 h-16 top-1/2 -translate-y-1/2 transition-all z-10 ${nlState.tenthSegment === i ? 'bg-orchard-apple/20 border-t-4 border-b-4 border-orchard-apple' : 'hover:bg-orchard-leaf/20'}`}
+                                                                    ></button>
+                                                                )}
+                                                            </div>
+                                                        );
+                                                    })}
+                                                    
+                                                    {/* Final 11th Tick Right */}
+                                                    <div className="absolute right-0 translate-x-1/2 flex flex-col items-center z-20">
+                                                        <button 
+                                                            onClick={() => !(problem.d === 100 && nlState.step === 1) && setNlState({...nlState, tick: 10})}
+                                                            disabled={problem.d === 100 && nlState.step === 1}
+                                                            className={`transition-all rounded-full ${
+                                                                (problem.d === 100 && nlState.step === 1) ? 'w-1 h-6 bg-orchard-charcoal cursor-default' :
+                                                                nlState.tick === 10 ? 'w-3 h-8 bg-orchard-apple ring-4 ring-orchard-apple/30' : 'w-1 h-6 bg-orchard-charcoal hover:bg-orchard-apple hover:h-8 hover:w-2 cursor-pointer'
+                                                            }`}
+                                                        ></button>
+                                                        <span className={`mt-3 text-sm font-bold absolute top-8 whitespace-nowrap ${nlState.tick === 10 ? 'text-orchard-apple text-base' : 'text-gray-500'}`}>
+                                                            {problem.d === 10 || (problem.d === 100 && nlState.step === 1) 
+                                                                ? `${problem.w + 1}.0` 
+                                                                : (nlState.tenthSegment === 9 ? `${problem.w + 1}.00` : `${problem.w}.${nlState.tenthSegment + 1}0`)}
+                                                        </span>
+                                                    </div>
+                                                </div>
+                                            </div>
+                                        </div>
+                                    ) : problem.type === 'arithmetic' || problem.type === 'convert' || (!problem.reverse) ? (
                                         /* PLACE VALUE INPUT for Fraction -> Decimal OR Arithmetic Answers */
                                         <div className="flex flex-col items-center w-full gap-6">
                                             <p className="text-gray-500 font-medium mb-2 uppercase tracking-wider text-sm">Place Value Chart</p>
@@ -710,12 +861,21 @@
                                         </div>
                                     )}
 
-                                    <button 
-                                        onClick={handleCheck}
-                                        className="w-full mt-10 bg-orchard-deepGreen hover:bg-orchard-charcoal text-white font-bold py-5 px-8 rounded-2xl shadow-lg transition-all active:scale-95 text-xl tracking-wide flex justify-center items-center gap-2"
-                                    >
-                                        <Icon icon={CheckCircle} /> Check Answer
-                                    </button>
+                                    {problem.type === 'numberline' && problem.d === 100 && nlState.step === 1 ? (
+                                        <button 
+                                            onClick={handleZoom}
+                                            className="w-full mt-12 bg-orchard-leaf hover:bg-orchard-deepGreen text-white font-bold py-5 px-8 rounded-2xl shadow-lg transition-all active:scale-95 text-xl tracking-wide flex justify-center items-center gap-2 pop-in"
+                                        >
+                                            <Icon icon={Search} /> Zoom In to Hundredths
+                                        </button>
+                                    ) : (
+                                        <button 
+                                            onClick={handleCheck}
+                                            className="w-full mt-12 bg-orchard-deepGreen hover:bg-orchard-charcoal text-white font-bold py-5 px-8 rounded-2xl shadow-lg transition-all active:scale-95 text-xl tracking-wide flex justify-center items-center gap-2"
+                                        >
+                                            <Icon icon={CheckCircle} /> Check Answer
+                                        </button>
+                                    )}
                                 </div>
                             </div>
                         </main>
