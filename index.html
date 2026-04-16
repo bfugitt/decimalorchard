@@ -92,8 +92,8 @@
          * TEACHER CONFIGURATION SECTION
          *************************************************************************/
         const TEACHER_CONFIG = {
-            questionsToLevelUp: 7, 
-            teacherMode: false, // Set to true to unlock all levels for preview
+            questionsToLevelUp: 5, 
+            teacherMode: true, // Set to true to unlock all levels for preview
             levels: [
                 { id: 1, name: "Seeds", desc: "Tenths (Fractions to Decimals)", d: 10, mixed: false, reverse: false },
                 { id: 2, name: "Blossoms", desc: "Hundredths (Fractions to Decimals)", d: 100, mixed: false, reverse: false },
@@ -474,7 +474,7 @@
                         setFeedback({ msg: "Step 2: Now put your new fraction into the Place Value Chart!", type: "error" });
                         return;
                     }
-                    if (uOnes === 0 && uTenths === expectedT && uHundredths === expectedH) {
+                    if (uOnes === 0 && uTenths === expectedT && (problem.target === 10 || uHundredths === expectedH)) {
                         handleSuccess();
                     } else {
                         setFeedback({ msg: "Check your decimals in the place value chart. Use your visual grid!", type: "error" });
